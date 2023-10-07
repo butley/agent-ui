@@ -1,0 +1,22 @@
+
+
+export interface Message {
+  role: Role;
+  content: string;
+}
+
+export type Role = 'assistant' | 'user';
+
+export interface ChatBody {
+  messages: Message[];
+  key?: string;
+  prompt?: string;
+  temperature?: number;
+}
+
+export interface Conversation {
+  id?: number;
+  name: string;
+  messages: Message[];
+  folderId: string | null;
+}
