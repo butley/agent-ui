@@ -93,7 +93,7 @@ export const upsertConversation = async (conversation: Conversation) =>
         conversation,
     );
 
-export const getConversations = async (userId: number) =>
+export const getConversations = async (userId: number): Promise<AxiosResponse<Conversation[]>> =>
     chatClient.get<Conversation[]>({
         url: `/chat/conversation/${userId}`,
     });
@@ -103,7 +103,7 @@ export const deleteConversation = async (conversationId: number) =>
         url: `/chat/conversation/${conversationId}`,
     });
 
-export const createMessage = async (chatMessageEntity: ChatMessageEntity) =>
+export const createMessage = async (chatMessageEntity: ChatMessageEntity): Promise<AxiosResponse<ChatMessageEntity>> =>
     chatClient.post(
         {
             url: `/chat/messages`,
@@ -111,7 +111,7 @@ export const createMessage = async (chatMessageEntity: ChatMessageEntity) =>
         chatMessageEntity,
     );
 
-export const markAllMessagesAsRead = async (userId: number,conversationId: number, ) =>
+export const markAllMessagesAsRead = async (userId: number, conversationId: number) =>
     chatClient.post({
         url: `/chat/messages/read/${userId}/${conversationId}`,
     });
@@ -130,7 +130,27 @@ export const getOpenBillingCycle = async (ownerId: number) => {
     });
 };
 
-export const getMessages = (userId: number) =>
+export const getUnreadMessages = (userId: number, conversationId: number): Promise<AxiosResponse<ChatMessageEntity[]>> =>
     chatClient.get<ChatMessageEntity[]>({
-        url: `/chat/messages/last/${userId}/0`,
+        url: `/chat/messages/unread/${userId}/${conversationId}`,
+    });
+
+
+export const getAgentHostUrl = async (userId: number, agentId: number): Promise<AxiosResponse<string>> =>
+    chatClient.get({
+        url: `/agents/host-url/${userId}/${agentId}`,
+    });
+
+
+// AGENT FUNCTIONS  ----------------------------------------------
+
+export const postAgentMessage = async (endpoint: string, body: string, token: string) =>
+    await fetch(`${endpoint}/message`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        },
+        //signal: controller.signal,
+        body,
     });

@@ -1,5 +1,5 @@
 import { IconClearAll, IconSettings } from '@tabler/icons-react';
-import {
+import React, {
   MutableRefObject,
   memo,
   useCallback,
@@ -12,7 +12,6 @@ import toast from 'react-hot-toast';
 
 import { useTranslation } from 'next-i18next';
 
-import { getEndpoint } from '@/utils/app/api';
 import {
   saveConversation,
   saveConversations,
@@ -33,10 +32,12 @@ import { ModelSelect } from './ModelSelect';
 import { SystemPrompt } from './SystemPrompt';
 import { TemperatureSlider } from './Temperature';
 import { MemoizedChatMessage } from './MemoizedChatMessage';
-import { ChatMessageEntity, PortalUser } from "@/types/agent/models";
+import {ChatMessageEntity, convertChatMessagesToMessages, PortalUser} from "@/types/agent/models";
 import { useSession } from "next-auth/react";
-import { createMessage } from "@/components/agent/api";
+import { createMessage, getAgentHostUrl, getUnreadMessages, postAgentMessage } from "@/components/agent/api";
+import GlobalContext, { useGlobalContext } from "@/contexts/GlobalContext";
 import { AxiosResponse } from "axios";
+import {handleError} from "@/services/apiErrorHandling";
 
 interface Props {
   stopConversationRef: MutableRefObject<boolean>;
@@ -58,6 +59,7 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
       modelError,
       loading,
       prompts,
+      agentHostUrl
     },
     handleUpdateConversation,
     dispatch: homeDispatch,
@@ -71,6 +73,7 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
 
   const { data: session } = useSession();
   const portalUser: PortalUser = session?.user as PortalUser;
+  const { hostURL } = useGlobalContext();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -80,7 +83,64 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
     selectedConversation.messages = [];
   }
 
-  const sendMessage = async (messageEntity: ChatMessageEntity) => {
+  const fetchAgentHostUrl = async (userId: number, agentId: number) => {
+    return getAgentHostUrl(userId, agentId);
+  }
+
+  const fetchUnreadChatMessages = (userId: number, conversationId: number) => {
+    return getUnreadMessages(userId, conversationId);
+  }
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      homeDispatch({ field: 'loading', value: true });
+      homeDispatch({ field: 'messageIsStreaming', value: true });
+
+      fetchUnreadChatMessages(portalUser?.id!!, selectedConversation?.id!!).then(r => {
+        const chatMessages = r.data;
+
+        if (chatMessages.length === 0) {
+            return;
+        }
+
+        const newMessages = convertChatMessagesToMessages(r.data);
+        if (selectedConversation) {
+          const updatedMessages = [...selectedConversation.messages];
+          updatedMessages.pop();
+          selectedConversation.messages = [...updatedMessages, ...newMessages];
+        }
+
+        homeDispatch({
+          field: 'selectedConversation',
+          value: selectedConversation,
+        });
+      }).catch((error) => {
+        handleError(error, t('Not possible to fetch unread messages'));
+      }).finally(() => {
+        homeDispatch({ field: 'loading', value: false });
+        homeDispatch({ field: 'messageIsStreaming', value: false });
+      });
+    }, 60000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [portalUser?.id, selectedConversation]);  // Dependency on portalUser's id
+
+  // useEffect(() => {
+  //   const fetchData = async () => {
+  //     console.log(portalUser)
+  //     const hostUrlResponse = await fetchAgentHostUrl(portalUser.id!!, 0);
+  //     setHostURL(hostUrlResponse.data);
+  //
+  //     toast.success('Host: ' + hostUrlResponse.data);
+  //   };
+  //
+  //   // Call the async function
+  //   fetchData();
+  // }, [portalUser]);  // Dependency on portalUser's id
+
+  const persistMessage = async (messageEntity: ChatMessageEntity) => {
     return await createMessage(messageEntity)
   }
 
@@ -114,20 +174,48 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
           }
         };
 
-        sendMessage(messageEntity).then(r => {
-          const response = r as AxiosResponse<ChatMessageEntity>
-          onSend(response.data);
+        try {
+          const sendMessageResponse = await persistMessage(messageEntity);
+          const createdMessage = sendMessageResponse.data;
+          onSend(createdMessage);
+
           homeDispatch({
             field: 'selectedConversation',
             value: updatedConversation,
           });
+
+          let agentMessage = {
+            chat_message_id: createdMessage.id
+          }
+          let body = JSON.stringify(agentMessage);
+          const response = await postAgentMessage(agentHostUrl!!, body, '123')
+          if (!response.ok) {
+            toast.error(response.statusText);
+            return;
+          }
           saveConversation(updatedConversation);
-        }).catch((error) => {
-          toast.error(error.response.data.errorMessage)
-        }).finally(() => {
+
+        } catch (error) {
+          handleError(error, t('Not possible to send message'));
+        } finally {
           homeDispatch({ field: 'loading', value: false });
           homeDispatch({ field: 'messageIsStreaming', value: false });
-        });
+        }
+
+        // sendMessage(messageEntity).then(r => {
+        //   const response = r as AxiosResponse<ChatMessageEntity>
+        //   onSend(response.data);
+        //   homeDispatch({
+        //     field: 'selectedConversation',
+        //     value: updatedConversation,
+        //   });
+        //   saveConversation(updatedConversation);
+        // }).catch((error) => {
+        //   toast.error(error.response.data.errorMessage)
+        // }).finally(() => {
+        //   homeDispatch({ field: 'loading', value: false });
+        //   homeDispatch({ field: 'messageIsStreaming', value: false });
+        // });
 
         // const chatBody: ChatBody = {
         //   messages: updatedConversation.messages
@@ -379,6 +467,18 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
       }
     };
   }, [messagesEndRef]);
+
+  // console.log("Outside useEffect in ComponentExample:", hostURL);
+  // const contextValue = React.useContext(GlobalContext);
+  // console.log("Direct context value in ComponentExample:", contextValue);
+
+  // useEffect(() => {
+  //   if (hostURL) { // Check if hostURL is set (and not an empty string)
+  //     console.log("Inside ComponentExample useEffect:", hostURL);
+  //     toast.success('Host: ' + hostURL);
+  //
+  //   }
+  // }, [hostURL]);
 
   return (
     <div className="relative flex-1 overflow-hidden bg-white dark:bg-[#343541]">

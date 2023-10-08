@@ -41,13 +41,21 @@ import HomeContext from './home.context';
 import { HomeInitialState, initialState } from './home.state';
 
 import { UserCard } from "@/components/agent/UserCard";
-import {BillingCycleEntity, ChatMessageEntity, convertChatMessagesToMessages, formatCurrency, formatDate, PortalUser} from "@/types/agent/models";
+import { BillingCycleEntity, ChatMessageEntity, convertChatMessagesToMessages, formatCurrency, formatDate, PortalUser } from "@/types/agent/models";
 
 import { v4 as uuidv4 } from 'uuid';
-import {useSession, getSession} from "next-auth/react";
-import {AxiosResponse} from "axios";
-import {getConversations, getMessagesByConversationId, markAllMessagesAsRead, upsertConversation} from "@/components/agent/api";
+import { useSession, getSession } from "next-auth/react";
+import { AxiosResponse } from "axios";
+import {
+  getAgentHostUrl,
+  getConversations, getUnreadMessages,
+  getMessagesByConversationId,
+  markAllMessagesAsRead,
+  upsertConversation
+} from "@/components/agent/api";
 import toast from "react-hot-toast";
+import {useGlobalContext} from "@/contexts/GlobalContext";
+import {handleError} from "@/services/apiErrorHandling";
 
 interface Props {
   serverSideApiKeyIsSet: boolean;
@@ -64,6 +72,8 @@ const Home = ({
   const { getModels } = useApiService();
   const { getModelsError } = useErrorService();
   const [initialRender, setInitialRender] = useState<boolean>(true);
+
+  const { setHostURL } = useGlobalContext();
 
   const { data: session } = useSession();
   const portalUser: PortalUser = session?.user as PortalUser;
@@ -113,7 +123,11 @@ const Home = ({
   // CONVERSATIONS  ----------------------------------------------
 
   const fetchConversations = async (userId: number) => {
-    return await getConversations(userId);
+    return getConversations(userId);
+  }
+
+  const fetchAgentHostUrl = async (userId: number, agentId: number) => {
+    return getAgentHostUrl(userId, agentId);
   }
 
   const fetchConversationMessages = async (conversationId: number, userId: number)  => {
@@ -150,7 +164,7 @@ const Home = ({
 
       saveConversation(conversation);
     }).catch((error) => {
-      toast.error(t('Not possible to fetch conversation messages: ' + error.response.data.errorMessage));
+      handleError(error, t('Not possible to fetch conversation messages.'));
     }).finally(() => {
       dispatch({ field: 'loading', value: false });
     });
@@ -252,8 +266,7 @@ const Home = ({
           }
         })
         .catch((error) => {
-          console.log('error:', error);
-          toast.error(error.response.data.errorMessage)
+          handleError(error, t('Not possible to to update the conversation.'));
         })
         .finally(() => {
           dispatch({ field: 'loading', value: false });
@@ -322,22 +335,44 @@ const Home = ({
       });
   }, [defaultModelId, serverSideApiKeyIsSet, serverSidePluginKeysSet]);
 
+
   useEffect(() => {
     if (portalUser) {
-      fetchConversations(portalUser.id!!).then(r => {
-        const response = r as AxiosResponse
-        const conversations = response.data as Conversation[];
-        conversations.map(conversation => {
-          // If messages is undefined, assign an empty array
-          if (conversation.messages === undefined) {
-            return {...conversation, messages: []};
+      const fetchData = async () => {
+        try {
+          // Await the fetchConversations and type the response
+          const response = await fetchConversations(portalUser.id!!);
+          const conversations = response.data.map(conversation => {
+            // If messages is undefined, assign an empty array
+            return conversation.messages ? conversation : { ...conversation, messages: [] };
+          });
+
+          dispatch({ field: 'conversations', value: conversations });
+
+          // Await the fetchAgentHostUrl and type the response
+          const hostUrlResponse = await fetchAgentHostUrl(portalUser.id!!, 0);
+          dispatch({ field: 'agentHostUrl', value: hostUrlResponse.data });
+          //setHostURL(hostUrlResponse.data);
+        } catch (error) {
+          console.error(error);
+          if (error.isAxiosError) {
+            // dispatch({
+            //   field: 'selectedConversation',
+            //   value: undefined,
+            // });
+            toast.error("Could not fetch conversations");
+          } else {
+            // Some other error
+            toast.error(error.response.data.errorMessage);
           }
-        });
-        dispatch({ field: 'conversations', value: conversations });
-      });
+          // toast.error(error.response.data.errorMessage);
+        }
+      };
+
+      // Call the async function
+      fetchData();
     }
   }, [portalUser?.id]);  // Dependency on portalUser's id
-
 
   const onSend = useCallback(
       async (message: ChatMessageEntity) => {
