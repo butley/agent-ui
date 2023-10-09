@@ -14,7 +14,7 @@ import {
   useState,
 } from 'react';
 
-import { Conversation } from '@/types/chat';
+import { Conversation } from '@/types/agent/chat';
 
 import HomeContext from '@/pages/agent/home/home.context';
 

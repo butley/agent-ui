@@ -1,3 +1,4 @@
+import { UserEntity } from "@/types/agent/models";
 
 
 export interface Message {
@@ -19,4 +20,5 @@ export interface Conversation {
   name: string;
   messages: Message[];
   folderId: string | null;
+  user: UserEntity;
 }

@@ -2,7 +2,7 @@ import { Dispatch, createContext } from 'react';
 
 import { ActionType } from '@/hooks/useCreateReducer';
 
-import { Conversation } from '@/types/chat';
+import { Conversation } from '@/types/agent/chat';
 import { SupportedExportFormats } from '@/types/export';
 import { PluginKey } from '@/types/plugin';
 

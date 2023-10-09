@@ -238,60 +238,43 @@ const Home = ({
 
   // CONVERSATION OPERATIONS  --------------------------------------------
 
+  const sendUpsertConversation = (conversation: Conversation) => {
+    dispatch({field: 'loading', value: true});
+    conversation.user = {
+        id: portalUser.id,
+    }
+    upsertConversation(conversation)
+      .then((r) => {
+        let response = r as AxiosResponse;
+        if (response.status == 200) {
+          saveConversation(conversation);
+          //saveConversations(updatedConversations);
+        }
+      })
+      .catch((error) => {
+        handleError(error, t('Not possible to to update the conversation.'));
+      })
+      .finally(() => {
+        dispatch({field: 'loading', value: false});
+      });
+  };
+
   const handleNewConversation = () => {
-    dispatch({ field: 'loading', value: true });
 
     let newConversation: Conversation = {
       name: t('New Conversation'),
       messages: [],
-      //model: OpenAIModels[OpenAIModelID.GPT_3_5],
-      //prompt: DEFAULT_SYSTEM_PROMPT,
       folderId: null,
-      // user: {
-      //   id: portalUser.id,
-      // }
+      user: {
+        id: portalUser.id,
+      }
     };
 
-    upsertConversation(newConversation)
-        .then((r) => {
-          let response = r as AxiosResponse;
-          if (response.status == 200) {
-            const updatedConversations = [...conversations, newConversation];
+    sendUpsertConversation(newConversation);
+    const updatedConversations = [newConversation, ...conversations];
 
-            dispatch({ field: 'selectedConversation', value: newConversation });
-            dispatch({ field: 'conversations', value: updatedConversations });
-
-            //saveConversation(newConversation);
-            //saveConversations(updatedConversations);
-          }
-        })
-        .catch((error) => {
-          handleError(error, t('Not possible to to update the conversation.'));
-        })
-        .finally(() => {
-          dispatch({ field: 'loading', value: false });
-        });
-
-    // const lastConversation = conversations[conversations.length - 1];
-    //
-    // const newConversation: Conversation = {
-    //   id: uuidv4(),
-    //   name: t('New Conversation'),
-    //   messages: [],
-    //   model: lastConversation?.model || {
-    //     id: OpenAIModels[defaultModelId].id,
-    //     name: OpenAIModels[defaultModelId].name,
-    //     maxLength: OpenAIModels[defaultModelId].maxLength,
-    //     tokenLimit: OpenAIModels[defaultModelId].tokenLimit,
-    //   },
-    //   prompt: DEFAULT_SYSTEM_PROMPT,
-    //   temperature: lastConversation?.temperature ?? DEFAULT_TEMPERATURE,
-    //   folderId: null,
-    // };
-
-
-
-    dispatch({ field: 'loading', value: false });
+    dispatch({field: 'selectedConversation', value: newConversation});
+    dispatch({field: 'conversations', value: updatedConversations});
   };
 
   const handleUpdateConversation = (
@@ -308,6 +291,8 @@ const Home = ({
       conversations,
     );
 
+    sendUpsertConversation(single);
+    //
     dispatch({ field: 'selectedConversation', value: single });
     dispatch({ field: 'conversations', value: all });
   };
@@ -352,20 +337,8 @@ const Home = ({
           // Await the fetchAgentHostUrl and type the response
           const hostUrlResponse = await fetchAgentHostUrl(portalUser.id!!, 0);
           dispatch({ field: 'agentHostUrl', value: hostUrlResponse.data });
-          //setHostURL(hostUrlResponse.data);
         } catch (error) {
-          console.error(error);
-          if (error.isAxiosError) {
-            // dispatch({
-            //   field: 'selectedConversation',
-            //   value: undefined,
-            // });
-            toast.error("Could not fetch conversations");
-          } else {
-            // Some other error
-            toast.error(error.response.data.errorMessage);
-          }
-          // toast.error(error.response.data.errorMessage);
+          handleError(error, t('Not possible to fetch conversations.'));
         }
       };
 
