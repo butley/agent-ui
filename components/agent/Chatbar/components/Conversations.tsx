@@ -8,7 +8,7 @@ interface Props {
 
 export const Conversations = ({ conversations }: Props) => {
   return (
-    <div className="flex w-full flex-col gap-1">
+    <div className="flex w-full flex-col gap-0.5">
       {conversations
         .filter((conversation) => !conversation.folderId)
         .slice()

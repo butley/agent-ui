@@ -1,4 +1,4 @@
-import { Conversation } from '@/types/chat';
+import { Conversation } from '@/types/agent/chat';
 
 export interface ChatbarInitialState {
   searchTerm: string;
