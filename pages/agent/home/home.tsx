@@ -121,6 +121,17 @@ const Home = ({
     { enabled: true, refetchOnMount: false },
   );
 
+  useEffect(() => {
+    if (data) dispatch({ field: 'models', value: data });
+  }, [data, dispatch]);
+
+  useEffect(() => {
+    dispatch({ field: 'modelError', value: getModelsError(error) });
+  }, [dispatch, error, getModelsError]);
+
+
+  // CUSTOM FUNCTIONS  ----------------------------------------------
+
   const fetchBillingCycle = async (userId: number) => {
     try {
       return getOpenBillingCycle(userId);
@@ -133,13 +144,9 @@ const Home = ({
     fetchBillingCycle(userId).then(r => setBillingCycle(r?.data));
   }
 
-  useEffect(() => {
-    if (data) dispatch({ field: 'models', value: data });
-  }, [data, dispatch]);
-
-  useEffect(() => {
-    dispatch({ field: 'modelError', value: getModelsError(error) });
-  }, [dispatch, error, getModelsError]);
+  const fetchAgentHostUrl = async (userId: number, agentId: number) => {
+    return getAgentHostUrl(userId, agentId);
+  }
 
   // CONVERSATIONS  ----------------------------------------------
 
@@ -147,13 +154,27 @@ const Home = ({
     return getConversations(userId);
   }
 
-  const fetchAgentHostUrl = async (userId: number, agentId: number) => {
-    return getAgentHostUrl(userId, agentId);
-  }
+  const fetchConversationMessages = (conversation: Conversation)  => {
+    dispatch({field: 'loading', value: true});
+    getMessagesByConversationId(conversation.id!!, portalUser?.id!!).then(r => {
+      const chatMessages = r.data;
 
-  const fetchConversationMessages = async (conversationId: number, userId: number)  => {
-    return getMessagesByConversationId(conversationId, userId)
-  }
+      markUnreadMessagesAsRead(chatMessages, conversation);
+
+      conversation.messages = convertChatMessagesToMessages(chatMessages);
+
+      dispatch({
+        field: 'selectedConversation',
+        value: conversation,
+      });
+
+      saveConversation(conversation);
+    }).catch((error) => {
+      handleError(error, t('Not possible to fetch conversation messages.'));
+    }).finally(() => {
+      dispatch({ field: 'loading', value: false });
+    });
+  };
 
   const fetchPortalUserData = async () => {
     try {
@@ -167,16 +188,16 @@ const Home = ({
       dispatch({ field: 'conversations', value: conversations });
 
       // Await the fetchAgentHostUrl and type the response
-      console.log('Fetching agent host url');
+      //console.log('Fetching agent host url');
       const hostUrlResponse = await fetchAgentHostUrl(portalUser.id!!, 0);
-      console.log('Agent host url:', hostUrlResponse.data);
+      //console.log('Agent host url:', hostUrlResponse.data);
       dispatch({ field: 'agentHostUrl', value: hostUrlResponse.data });
     } catch (error) {
       handleError(error, t('Not possible to fetch conversations.'));
     }
   };
 
-  const fetchUnreadMessages = (userId: number, conversationId: number) => {
+  const fetchUnreadMessages = () => {
     console.log('Fetching unread messages');
     getUnreadMessages(portalUser?.id!!, selectedConversation?.id!!).then(r => {
       const chatMessages = r.data;
@@ -199,36 +220,20 @@ const Home = ({
     });
   }
 
-  const handleSelectConversation = (conversation: Conversation) => {
-    dispatch({ field: 'loading', value: true });
+  const markUnreadMessagesAsRead = (chatMessages: ChatMessageEntity[], conversation: Conversation) => {
+    // Check if there are any unread messages
+    const hasUnreadMessages = chatMessages.some(msg => msg.userUnread === true);
 
-    fetchConversationMessages(conversation.id!!, portalUser.id!!).then(r => {
-      const response = r as AxiosResponse<ChatMessageEntity[]>;
-      const chatMessages = response.data;
-
-      // Check if there are any unread messages
-      const hasUnreadMessages = chatMessages.some(msg => msg.userUnread === true);
-
-      // If there are unread messages, mark them as read
-      if (hasUnreadMessages) {
-        markAllMessagesAsRead(portalUser.id!!, conversation.id!!).catch(error => {
-          toast.error(t('Error marking messages as read: ' + (error.response?.data?.errorMessage || error.message)));
-        });
-      }
-
-      conversation.messages = convertChatMessagesToMessages(response.data);
-
-      dispatch({
-        field: 'selectedConversation',
-        value: conversation,
+    // If there are unread messages, mark them as read
+    if (hasUnreadMessages) {
+      markAllMessagesAsRead(portalUser.id!!, conversation.id!!).catch(error => {
+        toast.error(t('Error marking messages as read: ' + (error.response?.data?.errorMessage || error.message)));
       });
+    }
+  };
 
-      saveConversation(conversation);
-    }).catch((error) => {
-      handleError(error, t('Not possible to fetch conversation messages.'));
-    }).finally(() => {
-      dispatch({ field: 'loading', value: false });
-    });
+  const handleSelectConversation = (conversation: Conversation) => {
+    fetchConversationMessages(conversation)
   };
 
   // FOLDER OPERATIONS  --------------------------------------------
@@ -419,7 +424,7 @@ const Home = ({
 
     const intervalId = setInterval(() => {
       if (portalUser?.id && selectedConversation?.id) {
-        fetchUnreadMessages(portalUser?.id!!, selectedConversation?.id!)
+        fetchUnreadMessages();
       }
     }, 10000);
 

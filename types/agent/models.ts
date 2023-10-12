@@ -44,8 +44,13 @@ export interface PortalUser {
 }
 
 export function convertChatMessagesToMessages(
-  entities: ChatMessageEntity[],
+    entities: ChatMessageEntity[] | null | undefined,
 ): Message[] {
+  // Return an empty array if entities is null, undefined, or empty
+  if (!entities || entities.length === 0) {
+    return [];
+  }
+
   return entities.flatMap((entity) => {
     const messages: Message[] = [];
 

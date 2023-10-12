@@ -119,7 +119,7 @@ export const markAllMessagesAsRead = async (userId: number, conversationId: numb
 export const getMessagesByConversationId = async (
     conversationId: number,
     userId: number,
-) =>
+): Promise<AxiosResponse<ChatMessageEntity[]>> =>
     chatClient.get<ChatMessageEntity[]>({
         url: `/chat/messages/conversation/${conversationId}/${userId}`,
     });
