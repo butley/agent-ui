@@ -23,7 +23,7 @@ import rehypeMathjax from 'rehype-mathjax';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import {useSession} from "next-auth/react";
-import {PortalUser} from "@/types/agent/models";
+import { PortalUser } from "@/types/agent/models";
 
 export interface Props {
   message: Message;
@@ -155,9 +155,6 @@ export const ChatMessage: FC<Props> = memo(({ message, messageIndex, onEdit }) =
         </div>
 
         <div className="prose mt-[-2px] w-full dark:prose-invert">
-          <div className="prose whitespace-pre-wrap dark:prose-invert flex-1">
-            {message.timestamp}
-          </div>
           {message.role === 'user' ? (
             <div className="flex w-full">
                 <div className="prose whitespace-pre-wrap dark:prose-invert flex-1">
@@ -240,6 +237,10 @@ export const ChatMessage: FC<Props> = memo(({ message, messageIndex, onEdit }) =
               </div>
             </div>
           )}
+          {/* Timestamp */}
+          <div className="text-sm md:text-xs lg:text-2xs text-[12.5px] text-right mt-1 text-gray-600 dark:text-gray-400">
+            {new Date(message.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+          </div>
         </div>
       </div>
     </div>

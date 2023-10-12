@@ -53,9 +53,7 @@ export function convertChatMessagesToMessages(
       messages.push({
         role: 'user',
         content: entity.userContent,
-        // @ts-ignore
-        chatTransactionID: entity.chatTransactionId,
-        timestamp: entity.userDateTime,
+        timestamp: entity.created,
       });
     }
 
@@ -63,9 +61,7 @@ export function convertChatMessagesToMessages(
       messages.push({
         role: 'assistant',
         content: entity.agentContent,
-        // @ts-ignore
-        chatTransactionID: entity.chatTransactionId,
-        timestamp: entity.agentDateTime,
+        timestamp: entity.created,
       });
     }
 
@@ -73,10 +69,30 @@ export function convertChatMessagesToMessages(
   });
 }
 
-export function formatDate(rawDate, locale = 'en-US', options = { year: 'numeric', month: 'long', day: 'numeric' }) {
-  const dateObj = new Date(rawDate[0], rawDate[1] - 1, rawDate[2]);
+export function formatDate(rawDate: string, locale = 'en-US', options = { year: 'numeric', month: 'long', day: 'numeric' }) {
+  const [year, month, day] = rawDate.split('-');
+  const dateObj = new Date(year, month - 1, day);  // month is 0-indexed
   return dateObj.toLocaleDateString(locale, options);
 }
+
+export function formatMonthYear(rawDate: string, locale = 'en-US') {
+  const [year, month] = rawDate.split('-');
+  const dateObj = new Date(year, month - 1);  // month is 0-indexed
+  return dateObj.toLocaleDateString(locale, { year: 'numeric', month: 'long' }).replace(" ", "/");
+}
+
+export function formatTimestamp(timestamp: string): string {
+  const date = new Date(timestamp);
+  const options = {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  };
+  return new Intl.DateTimeFormat('en-US', options).format(date);
+};
 
 export function formatCurrency(value: number): string {
   return value.toLocaleString('en-US', {

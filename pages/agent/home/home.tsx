@@ -41,7 +41,14 @@ import HomeContext from './home.context';
 import { HomeInitialState, initialState } from './home.state';
 
 import { UserCard } from "@/components/agent/UserCard";
-import { BillingCycleEntity, ChatMessageEntity, convertChatMessagesToMessages, formatCurrency, formatDate, PortalUser } from "@/types/agent/models";
+import {
+  BillingCycleEntity,
+  ChatMessageEntity,
+  convertChatMessagesToMessages,
+  formatCurrency,
+  formatMonthYear,
+  PortalUser
+} from "@/types/agent/models";
 
 import { v4 as uuidv4 } from 'uuid';
 import { useSession, getSession } from "next-auth/react";
@@ -51,7 +58,8 @@ import {
   getConversations, getUnreadMessages,
   getMessagesByConversationId,
   markAllMessagesAsRead,
-  upsertConversation
+  upsertConversation,
+  getOpenBillingCycle
 } from "@/components/agent/api";
 import toast from "react-hot-toast";
 import {useGlobalContext} from "@/contexts/GlobalContext";
@@ -73,9 +81,10 @@ const Home = ({
   const { getModelsError } = useErrorService();
   const [initialRender, setInitialRender] = useState<boolean>(true);
 
+  const [billingCycle, setBillingCycle] = useState<BillingCycleEntity>();
   const { setHostURL } = useGlobalContext();
 
-  const { data: session } = useSession();
+  const { data: session} = useSession();
   const portalUser: PortalUser = session?.user as PortalUser;
 
   const contextValue = useCreateReducer<HomeInitialState>({
@@ -112,6 +121,18 @@ const Home = ({
     { enabled: true, refetchOnMount: false },
   );
 
+  const fetchBillingCycle = async (userId: number) => {
+    try {
+      return getOpenBillingCycle(userId);
+    } catch (error) {
+      console.error('Error fetching billing cycle:', error);
+    }
+  }
+
+  const updateBillingCycle = async (userId: number) => {
+    fetchBillingCycle(userId).then(r => setBillingCycle(r?.data));
+  }
+
   useEffect(() => {
     if (data) dispatch({ field: 'models', value: data });
   }, [data, dispatch]);
@@ -134,8 +155,48 @@ const Home = ({
     return getMessagesByConversationId(conversationId, userId)
   }
 
-  const readAllMessages = async (userId: number, conversationId: number)  => {
-    return markAllMessagesAsRead(userId, conversationId)
+  const fetchPortalUserData = async () => {
+    try {
+      // Await the fetchConversations and type the response
+      const response = await fetchConversations(portalUser.id!!);
+      const conversations = response.data.map(conversation => {
+        // If messages is undefined, assign an empty array
+        return conversation.messages ? conversation : { ...conversation, messages: [] };
+      });
+
+      dispatch({ field: 'conversations', value: conversations });
+
+      // Await the fetchAgentHostUrl and type the response
+      console.log('Fetching agent host url');
+      const hostUrlResponse = await fetchAgentHostUrl(portalUser.id!!, 0);
+      console.log('Agent host url:', hostUrlResponse.data);
+      dispatch({ field: 'agentHostUrl', value: hostUrlResponse.data });
+    } catch (error) {
+      handleError(error, t('Not possible to fetch conversations.'));
+    }
+  };
+
+  const fetchUnreadMessages = (userId: number, conversationId: number) => {
+    console.log('Fetching unread messages');
+    getUnreadMessages(portalUser?.id!!, selectedConversation?.id!!).then(r => {
+      const chatMessages = r.data;
+      if (chatMessages.length === 0) {
+        return;
+      }
+      console.log("Unread messages:", chatMessages);
+      const newMessages = convertChatMessagesToMessages(r.data);
+      if (selectedConversation) {
+        const updatedMessages = selectedConversation.messages;
+        updatedMessages.pop();
+        selectedConversation.messages = [...updatedMessages, ...newMessages];
+      }
+      dispatch({ field: 'loading', value: false });
+      dispatch({ field: 'messageIsStreaming', value: false });
+    }).catch((error) => {
+      handleError(error, t('Not possible to fetch unread messages.'));
+    }).finally(() => {
+
+    });
   }
 
   const handleSelectConversation = (conversation: Conversation) => {
@@ -150,7 +211,7 @@ const Home = ({
 
       // If there are unread messages, mark them as read
       if (hasUnreadMessages) {
-        readAllMessages(portalUser.id!!, conversation.id!!).catch(error => {
+        markAllMessagesAsRead(portalUser.id!!, conversation.id!!).catch(error => {
           toast.error(t('Error marking messages as read: ' + (error.response?.data?.errorMessage || error.message)));
         });
       }
@@ -171,7 +232,6 @@ const Home = ({
   };
 
   // FOLDER OPERATIONS  --------------------------------------------
-
   const handleCreateFolder = (name: string, type: FolderType) => {
     const newFolder: FolderInterface = {
       id: uuidv4(),
@@ -238,29 +298,32 @@ const Home = ({
 
   // CONVERSATION OPERATIONS  --------------------------------------------
 
-  const sendUpsertConversation = (conversation: Conversation) => {
-    dispatch({field: 'loading', value: true});
+  const sendUpsertConversation = async (conversation: Conversation): Promise<Conversation | null> => {
+    dispatch({ field: 'loading', value: true });
+
+    // Ensure the user property is set on the conversation object
     conversation.user = {
-        id: portalUser.id,
+      id: portalUser.id,
+    };
+
+    try {
+      const response = await upsertConversation(conversation) as AxiosResponse;
+      if (response.status === 200) {
+        const updatedConversation = response.data;
+        saveConversation(updatedConversation);
+        //saveConversations(updatedConversations);
+        return updatedConversation;  // Return the updated conversation record
+      }
+      throw new Error('Failed to update the conversation');
+    } catch (error) {
+      handleError(error, t('Not possible to update the conversation.'));
+      return null;  // Return null if an error occurs
+    } finally {
+      dispatch({ field: 'loading', value: false });
     }
-    upsertConversation(conversation)
-      .then((r) => {
-        let response = r as AxiosResponse;
-        if (response.status == 200) {
-          saveConversation(conversation);
-          //saveConversations(updatedConversations);
-        }
-      })
-      .catch((error) => {
-        handleError(error, t('Not possible to to update the conversation.'));
-      })
-      .finally(() => {
-        dispatch({field: 'loading', value: false});
-      });
   };
 
-  const handleNewConversation = () => {
-
+  const handleNewConversation = async () => {
     let newConversation: Conversation = {
       name: t('New Conversation'),
       messages: [],
@@ -270,11 +333,19 @@ const Home = ({
       }
     };
 
-    sendUpsertConversation(newConversation);
-    const updatedConversations = [newConversation, ...conversations];
-
-    dispatch({field: 'selectedConversation', value: newConversation});
-    dispatch({field: 'conversations', value: updatedConversations});
+    try {
+      // Await the result of sendUpsertConversation
+      const savedConversation = await sendUpsertConversation(newConversation);
+      if (savedConversation) {
+        const updatedConversations = [savedConversation, ...conversations];
+        dispatch({ field: 'selectedConversation', value: savedConversation });
+        dispatch({ field: 'conversations', value: updatedConversations });
+      } else {
+        console.error('Failed to save new conversation');
+      }
+    } catch (error) {
+      console.error('Error handling new conversation:', error);
+    }
   };
 
   const handleUpdateConversation = (
@@ -300,6 +371,21 @@ const Home = ({
   // EFFECTS  --------------------------------------------
 
   useEffect(() => {
+
+    const intervalId = setInterval(() => {
+      updateBillingCycle(portalUser?.id!!);
+    }, 300000);
+
+    if (portalUser?.id) {
+      updateBillingCycle(portalUser?.id!!);
+    }
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [portalUser]);
+
+  useEffect(() => {
     if (window.innerWidth < 640) {
       dispatch({ field: 'showChatbar', value: false });
     }
@@ -323,29 +409,25 @@ const Home = ({
 
   useEffect(() => {
     if (portalUser) {
-      const fetchData = async () => {
-        try {
-          // Await the fetchConversations and type the response
-          const response = await fetchConversations(portalUser.id!!);
-          const conversations = response.data.map(conversation => {
-            // If messages is undefined, assign an empty array
-            return conversation.messages ? conversation : { ...conversation, messages: [] };
-          });
-
-          dispatch({ field: 'conversations', value: conversations });
-
-          // Await the fetchAgentHostUrl and type the response
-          const hostUrlResponse = await fetchAgentHostUrl(portalUser.id!!, 0);
-          dispatch({ field: 'agentHostUrl', value: hostUrlResponse.data });
-        } catch (error) {
-          handleError(error, t('Not possible to fetch conversations.'));
-        }
-      };
-
       // Call the async function
-      fetchData();
+      fetchPortalUserData();
     }
-  }, [portalUser?.id]);  // Dependency on portalUser's id
+  }, [portalUser?.id]);  // Dependency on portalUser
+
+  useEffect(() => {
+    console.log('setting up interval');
+
+    const intervalId = setInterval(() => {
+      if (portalUser?.id && selectedConversation?.id) {
+        fetchUnreadMessages(portalUser?.id!!, selectedConversation?.id!)
+      }
+    }, 10000);
+
+    return () => {
+      console.log('Clearing interval');
+      clearInterval(intervalId);
+    };
+  }, [selectedConversation]);  // Dependency on portalUser's id
 
   const onSend = useCallback(
       async (message: ChatMessageEntity) => {
@@ -475,7 +557,16 @@ const Home = ({
                             <a href="#" className="text-gray-600 hover:text-gray-100">Industries</a>*/}
                 </div>
                 <div className="flex space-x-4">
-                  {/*<button className="bg-secondary dark:bg-secondary hover:dark:bg-blue-100 shadow-md text-white px-4 py-2 rounded" onClick={() => signOut()}>Logout</button>*/}
+                  {billingCycle ? (
+                      <div className="relative text-right top-2 flex items-center mr-4 border-white">
+                        <span className="text-sm mr-2">Total: {formatCurrency(billingCycle.tokensTotal * billingCycle.rate)}</span>
+                        {billingCycle?.date ? formatMonthYear(billingCycle.date) : 'Loading...'}
+                      </div>
+                  ) : (
+                      <div className="flex flex-col justify-center mr-4">
+                        <span className="text-sm">Billing Cycle Not Available</span>
+                      </div>
+                  )}
                   <UserCard user={portalUser}/>
                 </div>
               </div>

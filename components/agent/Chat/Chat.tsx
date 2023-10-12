@@ -32,12 +32,12 @@ import { ModelSelect } from './ModelSelect';
 import { SystemPrompt } from './SystemPrompt';
 import { TemperatureSlider } from './Temperature';
 import { MemoizedChatMessage } from './MemoizedChatMessage';
-import {ChatMessageEntity, convertChatMessagesToMessages, PortalUser} from "@/types/agent/models";
+import { ChatMessageEntity, convertChatMessagesToMessages, PortalUser } from "@/types/agent/models";
 import { useSession } from "next-auth/react";
 import { createMessage, getAgentHostUrl, getUnreadMessages, postAgentMessage } from "@/components/agent/api";
 import GlobalContext, { useGlobalContext } from "@/contexts/GlobalContext";
 import { AxiosResponse } from "axios";
-import {handleError} from "@/services/apiErrorHandling";
+import { handleError } from "@/services/apiErrorHandling";
 
 interface Props {
   stopConversationRef: MutableRefObject<boolean>;
@@ -87,46 +87,6 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
     return getAgentHostUrl(userId, agentId);
   }
 
-  const fetchUnreadChatMessages = (userId: number, conversationId: number) => {
-    return getUnreadMessages(userId, conversationId);
-  }
-
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      homeDispatch({ field: 'loading', value: true });
-      homeDispatch({ field: 'messageIsStreaming', value: true });
-
-      fetchUnreadChatMessages(portalUser?.id!!, selectedConversation?.id!!).then(r => {
-        const chatMessages = r.data;
-
-        if (chatMessages.length === 0) {
-            return;
-        }
-
-        const newMessages = convertChatMessagesToMessages(r.data);
-        if (selectedConversation) {
-          const updatedMessages = [...selectedConversation.messages];
-          updatedMessages.pop();
-          selectedConversation.messages = [...updatedMessages, ...newMessages];
-        }
-
-        homeDispatch({
-          field: 'selectedConversation',
-          value: selectedConversation,
-        });
-      }).catch((error) => {
-        handleError(error, t('Not possible to fetch unread messages'));
-      }).finally(() => {
-        homeDispatch({ field: 'loading', value: false });
-        homeDispatch({ field: 'messageIsStreaming', value: false });
-      });
-    }, 60000);
-
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [portalUser?.id, selectedConversation]);  // Dependency on portalUser's id
-
   // useEffect(() => {
   //   const fetchData = async () => {
   //     console.log(portalUser)
@@ -147,6 +107,7 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
   const handleSend = useCallback(
     async (message: Message, deleteCount = 0, plugin: Plugin | null = null) => {
       if (selectedConversation) {
+        message.timestamp = new Date().toISOString();
         let updatedConversation: Conversation;
         if (deleteCount) {
           const updatedMessages = [...selectedConversation.messages];
@@ -375,6 +336,17 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
     ],
   );
 
+  const groupByDate = (messages: Message[]) => {
+    return messages.reduce((acc, message) => {
+      const date = new Date(message.timestamp).toLocaleDateString();
+      if (!acc[date]) {
+        acc[date] = [];
+      }
+      acc[date].push(message);
+      return acc;
+    }, {});
+  };
+
   const scrollToBottom = useCallback(() => {
     if (autoScrollEnabled) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -480,6 +452,8 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
   //   }
   // }, [hostURL]);
 
+  const groupedMessages = groupByDate(selectedConversation?.messages!!);
+
   return (
     <div className="relative flex-1 overflow-hidden bg-white dark:bg-[#343541]">
       {!(apiKey || serverSideApiKeyIsSet) ? (
@@ -547,20 +521,26 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
                   </div>
                 )}
 
-                {selectedConversation?.messages.map((message, index) => (
-                  <MemoizedChatMessage
-                    key={index}
-                    message={message}
-                    messageIndex={index}
-                    onEdit={(editedMessage) => {
-                      setCurrentMessage(editedMessage);
-                      // discard edited message and the ones that come after then resend
-                      handleSend(
-                        editedMessage,
-                        selectedConversation?.messages.length - index,
-                      );
-                    }}
-                  />
+                {Object.keys(groupedMessages).map(date => (
+                    <div key={date}>
+                      <div className="text-center font-bold my-1">
+                       {new Date(date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' })}
+                      </div>
+                      {groupedMessages[date].map((message, index) => (
+                          <MemoizedChatMessage
+                              key={index}
+                              message={message}
+                              messageIndex={index}
+                              onEdit={(editedMessage) => {
+                                setCurrentMessage(editedMessage);
+                                handleSend(
+                                    editedMessage,
+                                    selectedConversation?.messages.length - index,
+                                );
+                              }}
+                          />
+                      ))}
+                    </div>
                 ))}
 
                 {loading && <ChatLoader />}

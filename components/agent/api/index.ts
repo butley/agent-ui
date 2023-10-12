@@ -85,7 +85,7 @@ export const emailExists = async (email: string) =>
         url: `/users/email-exists/${email}`,
     });
 
-export const upsertConversation = async (conversation: Conversation) =>
+export const upsertConversation = async (conversation: Conversation): Promise<AxiosResponse<Conversation>> =>
     chatClient.post<Conversation>(
         {
             url: `/chat/conversation`,
@@ -124,11 +124,10 @@ export const getMessagesByConversationId = async (
         url: `/chat/messages/conversation/${conversationId}/${userId}`,
     });
 
-export const getOpenBillingCycle = async (ownerId: number) => {
-    return chatClient.get<BillingCycleEntity>({
+export const getOpenBillingCycle = async (ownerId: number): Promise<AxiosResponse<BillingCycleEntity>> =>
+    chatClient.get<BillingCycleEntity>({
         url: `/billing/cycle/${ownerId}`,
     });
-};
 
 export const getUnreadMessages = (userId: number, conversationId: number): Promise<AxiosResponse<ChatMessageEntity[]>> =>
     chatClient.get<ChatMessageEntity[]>({
