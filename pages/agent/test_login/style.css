@@ -1,0 +1,263 @@
+.login {
+  background-color: #ffffff;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  width: 100%;
+}
+
+.login .group-wrapper {
+  background-color: #ffffff;
+  height: 768px;
+  overflow: hidden;
+  width: 1366px;
+}
+
+.login .group {
+  height: 768px;
+  left: 154px;
+  position: relative;
+  width: 1216px;
+}
+
+.login .overlap-group-wrapper {
+  height: 24px;
+  left: 0;
+  position: absolute;
+  top: 485px;
+  width: 366px;
+}
+
+.login .overlap-group {
+  height: 24px;
+  position: relative;
+  width: 364px;
+}
+
+.login .login-with-others {
+  color: transparent;
+  font-family: "Poppins", Helvetica;
+  font-size: 16px;
+  font-weight: 400;
+  left: 113px;
+  letter-spacing: 0;
+  line-height: normal;
+  position: absolute;
+  top: 0;
+}
+
+.login .text-wrapper {
+  color: #1c1c1c;
+  font-weight: 700;
+}
+
+.login .span {
+  color: #525252;
+}
+
+.login .subtract {
+  height: 1px;
+  left: 0;
+  position: absolute;
+  top: 11px;
+  width: 364px;
+}
+
+.login .div {
+  color: #000000;
+  font-family: "Poppins", Helvetica;
+  font-size: 30px;
+  font-weight: 700;
+  left: 135px;
+  letter-spacing: 0;
+  line-height: normal;
+  position: absolute;
+  top: 184px;
+  white-space: nowrap;
+}
+
+.login .p {
+  color: #525252;
+  font-family: "Poppins", Helvetica;
+  font-size: 16px;
+  font-weight: 400;
+  left: 28px;
+  letter-spacing: 0;
+  line-height: normal;
+  position: absolute;
+  top: 222px;
+}
+
+.login .overlap-wrapper {
+  height: 52px;
+  left: 0;
+  position: absolute;
+  top: 333px;
+  width: 366px;
+}
+
+.login .overlap {
+  background-color: #f1916d33;
+  border-radius: 16px;
+  height: 52px;
+  position: relative;
+  width: 364px;
+}
+
+.login .text-wrapper-2 {
+  color: #1c1c1c;
+  font-family: "Poppins", Helvetica;
+  font-size: 22px;
+  font-weight: 400;
+  left: 48px;
+  letter-spacing: 0;
+  line-height: normal;
+  position: absolute;
+  background-color: transparent;
+  height: 30px;
+  top: 10px;
+}
+
+.login .frame {
+  height: 24px;
+  left: 18px;
+  position: absolute;
+  top: 14px;
+  width: 24px;
+}
+
+.login .div-wrapper {
+  height: 52px;
+  left: 0;
+  position: absolute;
+  top: 263px;
+  width: 366px;
+}
+
+.login .group-2 {
+  height: 52px;
+  left: 14px;
+  position: absolute;
+  top: 409px;
+  width: 126px;
+}
+
+.login .overlap-2 {
+  background: linear-gradient(180deg, rgb(245, 215, 219) 0%, rgb(241, 145, 109) 100%);
+  border-radius: 16px;
+  box-shadow: 0px 8px 21px #00000029;
+  height: 52px;
+  position: relative;
+  width: 124px;
+}
+
+.login .text-wrapper-3 {
+  color: #ffffff;
+  font-family: "Poppins", Helvetica;
+  font-size: 12px;
+  font-weight: 700;
+  left: 30px;
+  letter-spacing: 0;
+  line-height: normal;
+  position: absolute;
+  top: 17px;
+}
+
+.login .group-3 {
+  height: 52px;
+  left: 226px;
+  position: absolute;
+  top: 409px;
+  width: 126px;
+}
+
+.login .text-wrapper-4 {
+  color: #ffffff;
+  font-family: "Poppins", Helvetica;
+  font-size: 12px;
+  font-weight: 700;
+  left: 18px;
+  letter-spacing: 0;
+  line-height: normal;
+  position: absolute;
+  top: 17px;
+}
+
+.login .group-4 {
+  height: 52px;
+  left: 0;
+  position: absolute;
+  top: 533px;
+  width: 364px;
+}
+
+.login .group-5 {
+  border: 1px solid;
+  border-color: #f0edff;
+  border-radius: 16px;
+  height: 52px;
+}
+
+.login .group-6 {
+  height: 30px;
+  left: 109px;
+  position: relative;
+  top: 10px;
+  width: 146px;
+}
+
+.login .login-with-google {
+  color: #1c1c1c;
+  font-family: "Poppins", Helvetica;
+  font-size: 12px;
+  font-weight: 400;
+  left: 38px;
+  letter-spacing: 0;
+  line-height: normal;
+  position: absolute;
+  top: 6px;
+}
+
+.login .text-wrapper-5 {
+  color: #1c1c1c;
+  font-family: "Poppins", Helvetica;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.login .text-wrapper-6 {
+  font-weight: 700;
+}
+
+.login .google {
+  height: 30px;
+  left: 0;
+  object-fit: cover;
+  position: absolute;
+  top: 0;
+  width: 30px;
+}
+
+.login .element-robotic-wrapper {
+  background-image: url(../../../public/img/rectangle-4.svg);
+  background-size: 100% 100%;
+  height: 768px;
+  left: 529px;
+  position: absolute;
+  top: 0;
+  width: 683px;
+}
+
+.login .element-robotic {
+  height: 512px;
+  left: 86px;
+  object-fit: cover;
+  position: absolute;
+  top: 92px;
+  width: 512px;
+}
+
+.group-2, .group-3, .group-4 {
+  cursor: pointer;
+}
