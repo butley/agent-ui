@@ -553,15 +553,20 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
             )}
           </div>
 
-          <ChatInput
-            stopConversationRef={stopConversationRef}
-            textareaRef={textareaRef}
-            onSend={(message, plugin) => {
-              handleSend(message, 0, plugin);
-            }}
-            onScrollDownClick={handleScrollDown}
-            showScrollDownButton={showScrollDownButton}
-          />
+          {messageIsStreaming ? (
+              <div/>
+          ) : (
+              <ChatInput
+                  stopConversationRef={stopConversationRef}
+                  textareaRef={textareaRef}
+                  onSend={(message, plugin) => {
+                    handleSend(message, 0, plugin);
+                  }}
+                  onScrollDownClick={handleScrollDown}
+                  showScrollDownButton={showScrollDownButton}
+              />
+          )}
+
         </>
       )}
     </div>
