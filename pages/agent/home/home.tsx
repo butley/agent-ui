@@ -59,7 +59,7 @@ import {
   getMessagesByConversationId,
   markAllMessagesAsRead,
   upsertConversation,
-  getOpenBillingCycle
+  getOpenBillingCycle, markUnreadMessagesAsRead, fetchUnreadMessages
 } from "@/components/agent/api";
 import toast from "react-hot-toast";
 import {useGlobalContext} from "@/contexts/GlobalContext";
@@ -159,7 +159,7 @@ const Home = ({
     getMessagesByConversationId(conversation.id!!, portalUser?.id!!).then(r => {
       const chatMessages = r.data;
 
-      markUnreadMessagesAsRead(chatMessages, conversation);
+      markUnreadMessagesAsRead(portalUser?.id!!, chatMessages, conversation);
 
       conversation.messages = convertChatMessagesToMessages(chatMessages);
 
@@ -194,41 +194,6 @@ const Home = ({
       dispatch({ field: 'agentHostUrl', value: hostUrlResponse.data });
     } catch (error) {
       handleError(error, t('Not possible to fetch conversations.'));
-    }
-  };
-
-  const fetchUnreadMessages = () => {
-    console.log('Fetching unread messages');
-    getUnreadMessages(portalUser?.id!!, selectedConversation?.id!!).then(r => {
-      const chatMessages = r.data;
-      if (chatMessages.length === 0) {
-        return;
-      }
-      console.log("Unread messages:", chatMessages);
-      const newMessages = convertChatMessagesToMessages(r.data);
-      if (selectedConversation) {
-        const updatedMessages = selectedConversation.messages;
-        updatedMessages.pop();
-        selectedConversation.messages = [...updatedMessages, ...newMessages];
-      }
-      dispatch({ field: 'loading', value: false });
-      dispatch({ field: 'messageIsStreaming', value: false });
-    }).catch((error) => {
-      handleError(error, t('Not possible to fetch unread messages.'));
-    }).finally(() => {
-
-    });
-  }
-
-  const markUnreadMessagesAsRead = (chatMessages: ChatMessageEntity[], conversation: Conversation) => {
-    // Check if there are any unread messages
-    const hasUnreadMessages = chatMessages.some(msg => msg.userUnread === true);
-
-    // If there are unread messages, mark them as read
-    if (hasUnreadMessages) {
-      markAllMessagesAsRead(portalUser.id!!, conversation.id!!).catch(error => {
-        toast.error(t('Error marking messages as read: ' + (error.response?.data?.errorMessage || error.message)));
-      });
     }
   };
 
@@ -419,20 +384,20 @@ const Home = ({
     }
   }, [portalUser?.id]);  // Dependency on portalUser
 
-  useEffect(() => {
-    console.log('setting up interval');
-
-    const intervalId = setInterval(() => {
-      if (portalUser?.id && selectedConversation?.id) {
-        fetchUnreadMessages();
-      }
-    }, 10000);
-
-    return () => {
-      console.log('Clearing interval');
-      clearInterval(intervalId);
-    };
-  }, [selectedConversation]);  // Dependency on portalUser's id
+  // useEffect(() => {
+  //   console.log('setting up interval');
+  //
+  //   const intervalId = setInterval(() => {
+  //     if (portalUser?.id && selectedConversation?.id) {
+  //       fetchUnreadMessages(portalUser?.id, selectedConversation);
+  //     }
+  //   }, 10000);
+  //
+  //   return () => {
+  //     console.log('Clearing interval');
+  //     clearInterval(intervalId);
+  //   };
+  // }, [selectedConversation]);  // Dependency on portalUser's id
 
   const onSend = useCallback(
       async (message: ChatMessageEntity) => {

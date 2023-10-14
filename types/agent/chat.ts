@@ -4,6 +4,7 @@ import { UserEntity } from "@/types/agent/models";
 export interface Message {
   role: Role;
   content: string;
+  reasoning?: string;
   timestamp?: string;
 }
 

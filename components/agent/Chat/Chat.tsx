@@ -34,10 +34,11 @@ import { TemperatureSlider } from './Temperature';
 import { MemoizedChatMessage } from './MemoizedChatMessage';
 import { ChatMessageEntity, convertChatMessagesToMessages, PortalUser } from "@/types/agent/models";
 import { useSession } from "next-auth/react";
-import { createMessage, getAgentHostUrl, getUnreadMessages, postAgentMessage } from "@/components/agent/api";
+import { createMessage, fetchUnreadMessages, getAgentHostUrl, getUnreadMessages, postAgentMessage } from "@/components/agent/api";
 import GlobalContext, { useGlobalContext } from "@/contexts/GlobalContext";
 import { AxiosResponse } from "axios";
 import { handleError } from "@/services/apiErrorHandling";
+import { sleep } from "@/utils/agent/util";
 
 interface Props {
   stopConversationRef: MutableRefObject<boolean>;
@@ -78,6 +79,15 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const [streamm, setStreammn] = useState(false);
+
+  const handleStreamm = async () => {
+    setStreammn(prev => !prev);
+    console.log('streamm', streamm);
+    homeDispatch({ field: 'loading', value: streamm });
+    homeDispatch({ field: 'messageIsStreaming', value: streamm });
+  }
 
   if (selectedConversation && !selectedConversation.messages) {
     selectedConversation.messages = [];
@@ -135,9 +145,11 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
           }
         };
 
+        let createdMessage: ChatMessageEntity;
+        const agentToken = '123';
         try {
           const sendMessageResponse = await persistMessage(messageEntity);
-          const createdMessage = sendMessageResponse.data;
+          createdMessage = sendMessageResponse.data;
           onSend(createdMessage);
 
           homeDispatch({
@@ -148,182 +160,135 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
           let agentMessage = {
             chat_message_id: createdMessage.id
           }
+
           let body = JSON.stringify(agentMessage);
-          const response = await postAgentMessage(agentHostUrl!!, body, '123')
+          const response = await postAgentMessage(agentHostUrl!!, body, agentToken)
           if (!response.ok) {
             toast.error(response.statusText);
             return;
           }
           saveConversation(updatedConversation);
-
         } catch (error) {
           handleError(error, t('Not possible to send message'));
-        } finally {
+          homeDispatch({ field: 'loading', value: false });
+          homeDispatch({ field: 'messageIsStreaming', value: false });
+          return;
+        }
+
+        await sleep(1000);
+        const controller = new AbortController();
+        try {
+          const response = await fetch(`${agentHostUrl!!}/stream/${createdMessage.id!!}`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${agentToken}`
+            },
+            signal: controller.signal,
+          });
+
+          if (!response.ok) {
+            homeDispatch({ field: 'loading', value: false });
+            homeDispatch({ field: 'messageIsStreaming', value: false });
+            toast.error('Failed to get the response streaming');
+            return;
+          }
+          //console.log('Pre-streaming');
+          const data = response.body;
+          if (!data) {
+            homeDispatch({ field: 'loading', value: false });
+            homeDispatch({ field: 'messageIsStreaming', value: false });
+            return;
+          }
+          if (updatedConversation.messages.length === 1) {
+            const { content } = message;
+            const customName =
+                content.length > 30 ? content.substring(0, 30) + '...' : content;
+            updatedConversation = {
+              ...updatedConversation,
+              name: customName,
+            };
+          }
+          //homeDispatch({ field: 'loading', value: false });
+          const reader = data.getReader();
+          const decoder = new TextDecoder();
+          let done = false;
+          let text = '';
+          let isFirst = true;
+          console.log('isFirst', isFirst);
+          while (!done) {
+            console.log('Streaming');
+            if (stopConversationRef.current) {
+              controller.abort();
+              done = true;
+              break;
+            }
+            const { value, done: doneReading } = await reader.read();
+            done = doneReading;
+            const chunkValue = decoder.decode(value);
+            text += chunkValue;
+            homeDispatch({ field: 'loading', value: false });
+            if (isFirst) {
+              isFirst = false;
+              const updatedMessages: Message[] = [
+                ...updatedConversation.messages,
+                { role: 'assistant', content: chunkValue },
+              ];
+              updatedConversation = {
+                ...updatedConversation,
+                messages: updatedMessages,
+              };
+              homeDispatch({
+                field: 'selectedConversation',
+                value: updatedConversation,
+              });
+            } else {
+              homeDispatch({ field: 'loading', value: false });
+              const updatedMessages: Message[] =
+                  updatedConversation.messages.map((message, index) => {
+                    if (index === updatedConversation.messages.length - 1) {
+                      return {
+                        ...message,
+                        content: text,
+                      };
+                    }
+                    return message;
+                  });
+              updatedConversation = {
+                ...updatedConversation,
+                messages: updatedMessages,
+              };
+              homeDispatch({
+                field: 'selectedConversation',
+                value: updatedConversation,
+              });
+            }
+          }
+          console.log('Streaming done');
+          updatedConversation.messages.pop();
+          sleep(1000);
+          fetchUnreadMessages(portalUser?.id!!, updatedConversation);
+          saveConversation(updatedConversation);
+          const updatedConversations: Conversation[] = conversations.map(
+              (conversation) => {
+                if (conversation.id === selectedConversation.id) {
+                  return updatedConversation;
+                }
+                return conversation;
+              },
+          );
+          if (updatedConversations.length === 0) {
+            updatedConversations.push(updatedConversation);
+          }
+          homeDispatch({ field: 'conversations', value: updatedConversations });
+          saveConversations(updatedConversations);
+          homeDispatch({ field: 'messageIsStreaming', value: false });
+        } catch (error) {
+          console.error('Error:', error);
+          handleError(error, t('Not possible to receive the message'));
           homeDispatch({ field: 'loading', value: false });
           homeDispatch({ field: 'messageIsStreaming', value: false });
         }
-
-        // sendMessage(messageEntity).then(r => {
-        //   const response = r as AxiosResponse<ChatMessageEntity>
-        //   onSend(response.data);
-        //   homeDispatch({
-        //     field: 'selectedConversation',
-        //     value: updatedConversation,
-        //   });
-        //   saveConversation(updatedConversation);
-        // }).catch((error) => {
-        //   toast.error(error.response.data.errorMessage)
-        // }).finally(() => {
-        //   homeDispatch({ field: 'loading', value: false });
-        //   homeDispatch({ field: 'messageIsStreaming', value: false });
-        // });
-
-        // const chatBody: ChatBody = {
-        //   messages: updatedConversation.messages
-        // };
-        // const endpoint = getEndpoint(plugin);
-        // let body;
-        // if (!plugin) {
-        //   body = JSON.stringify(chatBody);
-        // } else {
-        //   body = JSON.stringify({
-        //     ...chatBody,
-        //     googleAPIKey: pluginKeys
-        //       .find((key) => key.pluginId === 'google-search')
-        //       ?.requiredKeys.find((key) => key.key === 'GOOGLE_API_KEY')?.value,
-        //     googleCSEId: pluginKeys
-        //       .find((key) => key.pluginId === 'google-search')
-        //       ?.requiredKeys.find((key) => key.key === 'GOOGLE_CSE_ID')?.value,
-        //   });
-        // }
-        // const controller = new AbortController();
-        // const response = await fetch(endpoint, {
-        //   method: 'POST',
-        //   headers: {
-        //     'Content-Type': 'application/json',
-        //   },
-        //   signal: controller.signal,
-        //   body,
-        // });
-        // if (!response.ok) {
-        //   homeDispatch({ field: 'loading', value: false });
-        //   homeDispatch({ field: 'messageIsStreaming', value: false });
-        //   toast.error(response.statusText);
-        //   return;
-        // }
-        // const data = response.body;
-        // if (!data) {
-        //   homeDispatch({ field: 'loading', value: false });
-        //   homeDispatch({ field: 'messageIsStreaming', value: false });
-        //   return;
-        // }
-        // if (!plugin) {
-        //   if (updatedConversation.messages.length === 1) {
-        //     const { content } = message;
-        //     const customName =
-        //       content.length > 30 ? content.substring(0, 30) + '...' : content;
-        //     updatedConversation = {
-        //       ...updatedConversation,
-        //       name: customName,
-        //     };
-        //   }
-        //   homeDispatch({ field: 'loading', value: false });
-        //   const reader = data.getReader();
-        //   const decoder = new TextDecoder();
-        //   let done = false;
-        //   let isFirst = true;
-        //   let text = '';
-        //   while (!done) {
-        //     if (stopConversationRef.current === true) {
-        //       controller.abort();
-        //       done = true;
-        //       break;
-        //     }
-        //     const { value, done: doneReading } = await reader.read();
-        //     done = doneReading;
-        //     const chunkValue = decoder.decode(value);
-        //     text += chunkValue;
-        //     if (isFirst) {
-        //       isFirst = false;
-        //       const updatedMessages: Message[] = [
-        //         ...updatedConversation.messages,
-        //         { role: 'assistant', content: chunkValue },
-        //       ];
-        //       updatedConversation = {
-        //         ...updatedConversation,
-        //         messages: updatedMessages,
-        //       };
-        //       homeDispatch({
-        //         field: 'selectedConversation',
-        //         value: updatedConversation,
-        //       });
-        //     } else {
-        //       const updatedMessages: Message[] =
-        //         updatedConversation.messages.map((message, index) => {
-        //           if (index === updatedConversation.messages.length - 1) {
-        //             return {
-        //               ...message,
-        //               content: text,
-        //             };
-        //           }
-        //           return message;
-        //         });
-        //       updatedConversation = {
-        //         ...updatedConversation,
-        //         messages: updatedMessages,
-        //       };
-        //       homeDispatch({
-        //         field: 'selectedConversation',
-        //         value: updatedConversation,
-        //       });
-        //     }
-        //   }
-        //   saveConversation(updatedConversation);
-        //   const updatedConversations: Conversation[] = conversations.map(
-        //     (conversation) => {
-        //       if (conversation.id === selectedConversation.id) {
-        //         return updatedConversation;
-        //       }
-        //       return conversation;
-        //     },
-        //   );
-        //   if (updatedConversations.length === 0) {
-        //     updatedConversations.push(updatedConversation);
-        //   }
-        //   homeDispatch({ field: 'conversations', value: updatedConversations });
-        //   saveConversations(updatedConversations);
-        //   homeDispatch({ field: 'messageIsStreaming', value: false });
-        // } else {
-        //   const { answer } = await response.json();
-        //   const updatedMessages: Message[] = [
-        //     ...updatedConversation.messages,
-        //     { role: 'assistant', content: answer },
-        //   ];
-        //   updatedConversation = {
-        //     ...updatedConversation,
-        //     messages: updatedMessages,
-        //   };
-        //   homeDispatch({
-        //     field: 'selectedConversation',
-        //     value: updatedConversation,
-        //   });
-        //   saveConversation(updatedConversation);
-        //   const updatedConversations: Conversation[] = conversations.map(
-        //     (conversation) => {
-        //       if (conversation.id === selectedConversation.id) {
-        //         return updatedConversation;
-        //       }
-        //       return conversation;
-        //     },
-        //   );
-        //   if (updatedConversations.length === 0) {
-        //     updatedConversations.push(updatedConversation);
-        //   }
-        //   homeDispatch({ field: 'conversations', value: updatedConversations });
-        //   saveConversations(updatedConversations);
-        //   homeDispatch({ field: 'loading', value: false });
-        //   homeDispatch({ field: 'messageIsStreaming', value: false });
-        // }
         setCurrentMessage(message);
       }
     },
@@ -336,9 +301,16 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
     ],
   );
 
+  const isValidDate = (date) => !isNaN(date);
+
   const groupByDate = (messages: Message[]) => {
     return messages.reduce((acc, message) => {
-      const date = new Date(message.timestamp).toLocaleDateString();
+      let dateObj = message.timestamp ? new Date(message.timestamp) : new Date();
+      if (!isValidDate(dateObj)) {
+        dateObj = new Date();  // Default to now if the date is invalid
+      }
+      const date = dateObj.toLocaleDateString();
+      message.timestamp = date;
       if (!acc[date]) {
         acc[date] = [];
       }
@@ -440,18 +412,6 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
     };
   }, [messagesEndRef]);
 
-  // console.log("Outside useEffect in ComponentExample:", hostURL);
-  // const contextValue = React.useContext(GlobalContext);
-  // console.log("Direct context value in ComponentExample:", contextValue);
-
-  // useEffect(() => {
-  //   if (hostURL) { // Check if hostURL is set (and not an empty string)
-  //     console.log("Inside ComponentExample useEffect:", hostURL);
-  //     toast.success('Host: ' + hostURL);
-  //
-  //   }
-  // }, [hostURL]);
-
   const groupedMessages = groupByDate(selectedConversation?.messages!!);
 
   return (
@@ -521,6 +481,13 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
                   </div>
                 )}
 
+                <button
+                    className="min-w-[20px] p-1 text-neutral-400 hover:text-neutral-100"
+                    onClick={handleStreamm}
+                >
+                  Streamm
+                </button>
+
                 {Object.keys(groupedMessages).map(date => (
                     <div key={date}>
                       <div className="text-center font-bold my-1">
@@ -553,19 +520,16 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
             )}
           </div>
 
-          {messageIsStreaming ? (
-              <div/>
-          ) : (
-              <ChatInput
-                  stopConversationRef={stopConversationRef}
-                  textareaRef={textareaRef}
-                  onSend={(message, plugin) => {
-                    handleSend(message, 0, plugin);
-                  }}
-                  onScrollDownClick={handleScrollDown}
-                  showScrollDownButton={showScrollDownButton}
-              />
-          )}
+          <ChatInput
+              stopConversationRef={stopConversationRef}
+              textareaRef={textareaRef}
+              onSend={(message, plugin) => {
+                handleSend(message, 0, plugin);
+              }}
+              onScrollDownClick={handleScrollDown}
+              showScrollDownButton={showScrollDownButton}
+          />
+
 
         </>
       )}

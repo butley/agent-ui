@@ -1,7 +1,10 @@
 import axios, {AxiosRequestConfig, AxiosResponse} from 'axios';
 import axiosRetry from 'axios-retry';
-import {BillingCycleEntity, ChatMessageEntity, UserEntity} from '@/types/agent/models';
+import { BillingCycleEntity, ChatMessageEntity, convertChatMessagesToMessages, UserEntity } from '@/types/agent/models';
 import {Conversation} from '@/types/agent/chat';
+import { handleError } from "@/services/apiErrorHandling";
+import toast from "react-hot-toast";
+import { t } from "i18next";
 
 export type ChatHttpConfig = {
     url: string;
@@ -69,6 +72,40 @@ export const chatClient: HTTP = {
     },
 };
 
+export const markUnreadMessagesAsRead = (userId: number, chatMessages: ChatMessageEntity[], conversation: Conversation) => {
+    // Check if there are any unread messages
+    const hasUnreadMessages = chatMessages.some(msg => msg.userUnread === true);
+
+    // If there are unread messages, mark them as read
+    if (hasUnreadMessages) {
+        console.log('Marking messages as read: ', chatMessages.length);
+        markAllMessagesAsRead(userId, conversation.id!!).catch(error => {
+            toast.error(t('Error marking messages as read: ' + (error.response?.data?.errorMessage || error.message)));
+        });
+    }
+};
+
+export const fetchUnreadMessages = (userId: number, conversation: Conversation) => {
+    console.log('Fetching unread messages');
+    getUnreadMessages(userId, conversation?.id!!).then(r => {
+        const chatMessages = r.data;
+        if (chatMessages.length === 0) {
+            return;
+        }
+        console.log("Unread messages:", chatMessages);
+
+        const newMessages = convertChatMessagesToMessages(r.data);
+
+        markUnreadMessagesAsRead(userId, chatMessages, conversation);
+        const updatedMessages = conversation.messages;
+        conversation.messages = [...updatedMessages, ...newMessages];
+
+    }).catch((error) => {
+        handleError(error, t('Not possible to fetch unread messages.'));
+    }).finally(() => {
+
+    });
+}
 
 export const createUser = async (user: UserEntity) =>
     chatClient.post<UserEntity>({
@@ -150,6 +187,5 @@ export const postAgentMessage = async (endpoint: string, body: string, token: st
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
         },
-        //signal: controller.signal,
         body,
     });
