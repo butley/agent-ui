@@ -85,27 +85,33 @@ export const markUnreadMessagesAsRead = (userId: number, chatMessages: ChatMessa
     }
 };
 
-export const fetchUnreadMessages = (userId: number, conversation: Conversation) => {
-    console.log('Fetching unread messages');
-    getUnreadMessages(userId, conversation?.id!!).then(r => {
-        const chatMessages = r.data;
+export const fetchUnreadMessages = async (userId: number, conversation: Conversation): Promise<number> => {
+    try {
+        console.log('Fetching unread messages');
+        const response = await getUnreadMessages(userId, conversation?.id!!);
+        const chatMessages = response.data;
+
         if (chatMessages.length === 0) {
-            return;
+            return 0;  // Return 0 if there are no unread messages
         }
+
         console.log("Unread messages:", chatMessages);
 
-        const newMessages = convertChatMessagesToMessages(r.data);
+        const newMessages = convertChatMessagesToMessages(chatMessages);
 
-        markUnreadMessagesAsRead(userId, chatMessages, conversation);
+        markUnreadMessagesAsRead(userId, chatMessages, conversation);  // Assume this is an async function
+
         const updatedMessages = conversation.messages;
         conversation.messages = [...updatedMessages, ...newMessages];
 
-    }).catch((error) => {
+        return chatMessages.length;  // Return the count of unread messages
+    } catch (error) {
         handleError(error, t('Not possible to fetch unread messages.'));
-    }).finally(() => {
-
-    });
+        return 0;  // Return 0 in case of an error
+    }
 }
+
+// API CALLS  ----------------------------------------------
 
 export const createUser = async (user: UserEntity) =>
     chatClient.post<UserEntity>({

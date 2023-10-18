@@ -190,7 +190,7 @@ const Home = ({
       // Await the fetchAgentHostUrl and type the response
       //console.log('Fetching agent host url');
       const hostUrlResponse = await fetchAgentHostUrl(portalUser.id!!, 0);
-      //console.log('Agent host url:', hostUrlResponse.data);
+      console.log('Agent host url:', hostUrlResponse.data);
       dispatch({ field: 'agentHostUrl', value: hostUrlResponse.data });
     } catch (error) {
       handleError(error, t('Not possible to fetch conversations.'));
@@ -382,7 +382,7 @@ const Home = ({
       // Call the async function
       fetchPortalUserData();
     }
-  }, [portalUser?.id]);  // Dependency on portalUser
+  }, [portalUser]);  // Dependency on portalUser
 
   // useEffect(() => {
   //   console.log('setting up interval');

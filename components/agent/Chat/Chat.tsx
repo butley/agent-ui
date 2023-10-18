@@ -32,11 +32,10 @@ import { ModelSelect } from './ModelSelect';
 import { SystemPrompt } from './SystemPrompt';
 import { TemperatureSlider } from './Temperature';
 import { MemoizedChatMessage } from './MemoizedChatMessage';
-import { ChatMessageEntity, convertChatMessagesToMessages, PortalUser } from "@/types/agent/models";
+import { ChatMessageEntity, PortalUser } from "@/types/agent/models";
 import { useSession } from "next-auth/react";
-import { createMessage, fetchUnreadMessages, getAgentHostUrl, getUnreadMessages, postAgentMessage } from "@/components/agent/api";
+import { createMessage, fetchUnreadMessages, getAgentHostUrl, postAgentMessage } from "@/components/agent/api";
 import GlobalContext, { useGlobalContext } from "@/contexts/GlobalContext";
-import { AxiosResponse } from "axios";
 import { handleError } from "@/services/apiErrorHandling";
 import { sleep } from "@/utils/agent/util";
 
@@ -158,7 +157,8 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
           });
 
           let agentMessage = {
-            chat_message_id: createdMessage.id
+            chat_message_id: createdMessage.id,
+            conversation_id: updatedConversation.id,
           }
 
           let body = JSON.stringify(agentMessage);
@@ -178,7 +178,7 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
         await sleep(1000);
         const controller = new AbortController();
         try {
-          const response = await fetch(`${agentHostUrl!!}/stream/${createdMessage.id!!}`, {
+          const response = await fetch(`${agentHostUrl!!}/stream/${updatedConversation.id!!}`, {
             method: 'GET',
             headers: {
               'Content-Type': 'application/json',
@@ -264,10 +264,11 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
               });
             }
           }
-          console.log('Streaming done');
           updatedConversation.messages.pop();
-          sleep(1000);
-          fetchUnreadMessages(portalUser?.id!!, updatedConversation);
+
+          await sleep(1000);
+          const newMessagesCount = await fetchUnreadMessages(portalUser?.id!!, updatedConversation);
+
           saveConversation(updatedConversation);
           const updatedConversations: Conversation[] = conversations.map(
               (conversation) => {
@@ -305,12 +306,13 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
 
   const groupByDate = (messages: Message[]) => {
     return messages.reduce((acc, message) => {
-      let dateObj = message.timestamp ? new Date(message.timestamp) : new Date();
-      if (!isValidDate(dateObj)) {
-        dateObj = new Date();  // Default to now if the date is invalid
+      //console.log('message.timestamp', message.timestamp);
+      let dateObj;  // Declare dateObj variable
+      if (message.timestamp === undefined) {
+        message.timestamp = new Date().toISOString();
       }
-      const date = dateObj.toLocaleDateString();
-      message.timestamp = date;
+      dateObj = new Date(message.timestamp);  // Initialize dateObj if timestamp is defined
+      const date = dateObj.toLocaleDateString();  // Use dateObj to get the date string
       if (!acc[date]) {
         acc[date] = [];
       }
@@ -318,6 +320,7 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
       return acc;
     }, {});
   };
+
 
   const scrollToBottom = useCallback(() => {
     if (autoScrollEnabled) {
@@ -481,12 +484,12 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
                   </div>
                 )}
 
-                <button
+                {/*<button
                     className="min-w-[20px] p-1 text-neutral-400 hover:text-neutral-100"
                     onClick={handleStreamm}
                 >
                   Streamm
-                </button>
+                </button>*/}
 
                 {Object.keys(groupedMessages).map(date => (
                     <div key={date}>
