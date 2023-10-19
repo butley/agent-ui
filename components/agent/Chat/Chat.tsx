@@ -215,9 +215,7 @@ export const Chat = memo(({ stopConversationRef, onSend }: Props) => {
           let done = false;
           let text = '';
           let isFirst = true;
-          console.log('isFirst', isFirst);
           while (!done) {
-            console.log('Streaming');
             if (stopConversationRef.current) {
               controller.abort();
               done = true;
